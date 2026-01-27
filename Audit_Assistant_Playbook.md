@@ -1,10 +1,10 @@
-# Audit LLM Assistant Playbook
+# Audit Assistant Playbook
 Cognitive Framework for Smart Contract Auditing
 
 * Status: Experimental / Practitioner Tool
 * Audience: Experienced smart contract auditors
 
-This playbook describes a **minimal, reproducible flow** for working with LLM when auditing smart contracts.
+This playbook describes a **minimal, reproducible flow** for working when auditing smart contracts.
 This playbook does NOT automate security audits.
 It does NOT replace auditor judgment.
 It structures how auditors think, explore, validate, and report findings.
@@ -22,6 +22,26 @@ The main audit workflow and roles. Used in every audit.
 
 **SUPPORTING TOOLS**
 Optional utilities and coverage helpers. Used as needed.
+
+---
+
+## METHODOLOGY INTEGRATION
+
+This playbook structures **conversations**. The actual audit **methodology** lives in:
+
+| File | Purpose | When to Reference |
+|------|---------|-------------------|
+| `InfoSec/audit-workflow1.md` | Manual audit phases, checklists, attack vectors | During Code Path Explorer, hypothesis validation |
+| `InfoSec/audit-workflow2.md` | Semantic phase analysis (SNAPSHOT→COMMIT) | When classifying functions, tracing mutations |
+| `InfoSec/CommandInstruction.md` | System prompt for audit sessions | At start of any audit chat |
+
+**Key Methodology Concepts to Apply:**
+- **Semantic Phases**: SNAPSHOT → ACCOUNTING → VALIDATION → MUTATION → COMMIT
+- **Validation Checks**: Reachability, State Freshness, Execution Closure, Economic Realism
+- **Known Exploit Patterns**: Euler, Cream, Nomad, Wormhole, Curve read-only reentrancy, etc.
+- **Time-Boxing**: 40/40/20 rule for large codebases
+
+---
 
 ## HOW TO USE THIS PLAYBOOK (REAL AUDIT FLOW)
 
@@ -132,7 +152,7 @@ Optional utilities and coverage helpers. Used as needed.
 
 ### Purpose
 
-Prepare **one LLM-friendly file** with all in-scope code.
+Prepare **one friendly file** with all in-scope code.
 
 ### Input
 
@@ -164,7 +184,7 @@ Prepare **one LLM-friendly file** with all in-scope code.
 * INDEX (file paths)
 * FILE / END FILE blocks
 
-`merged.txt` **attached to the LLM chats** and used in all steps.
+`merged.txt` **attached to the chats** and used in all steps.
 
 
 ## 2. MAIN CHAT PROMPTS
@@ -227,9 +247,16 @@ No additional sections are allowed.
 5. Critical Flows
 - User flows involving assets (deposit, withdraw, borrow, liquidate, swap)
 - Admin flows
+- For each flow, identify the semantic phases: SNAPSHOT → ACCOUNTING → VALIDATION → MUTATION → COMMIT
 
 6. Invariants
 - What must always be true for the protocol to remain solvent?
+- Reference: [audit-workflow1.md, Step 3.2] for universal invariants
+
+7. Inheritance & Modifiers (per audit-workflow2.md, Step 2.1b)
+- Contract inheritance tree
+- Key modifiers and their execution order
+- Storage layout concerns (if upgradeable)
 
 Do NOT speculate.
 If information is missing, explicitly say "Unknown".
@@ -284,6 +311,11 @@ Constraints:
   - testable,
   - grounded in protocol design and trust assumptions.
 - Do NOT include purely speculative or unrealistic attacks.
+- Reference known exploit patterns from [audit-workflow1.md, Step 5.1b]:
+  - Price/Oracle: Euler, Cream, Harvest
+  - Reentrancy: DAO, Curve read-only, ERC777 hooks
+  - Access Control: Nomad, Wormhole, Parity
+  - Flash Loan: bZx, PancakeBunny, Rari/Fei
 
 Output STRICTLY in the following format:
 
@@ -291,12 +323,17 @@ For each hypothesis:
 
 H<N>. <Short title>
 
+Semantic Phase:
+- Which phase is vulnerable? [SNAPSHOT/ACCOUNTING/VALIDATION/MUTATION/COMMIT]
+- Cross-phase interaction? (e.g., Snapshot→Mutation race)
+
 Threat Model:
 - Who is the adversary?
 - What capabilities or privileges do they have?
 
 Attack Idea:
 - High-level description of the potential failure mode.
+- Similar to known exploit? [Name if applicable]
 
 Required Conditions:
 - What must be true in order for this attack to work?
@@ -351,11 +388,17 @@ Use merged.txt to locate and analyze the relevant functions and code paths.
 Your task is to determine whether a specific attack hypothesis
 actually follows from the code.
 
+**Methodology Reference:**
+- Apply semantic phase analysis from [audit-workflow2.md, Step 2.2-2.3]
+- Use the 7-step function checklist from [audit-workflow1.md, Step 4.1]
+- Trace inheritance and modifiers per [audit-workflow2.md, Step 2.1b]
+
 Your goals:
-- Trace execution paths
-- Identify edge cases
+- Trace execution paths by semantic phase (SNAPSHOT → ACCOUNTING → VALIDATION → MUTATION → COMMIT)
+- Identify edge cases using values from [audit-workflow1.md, Step 5.3]
 - Identify missing checks or incorrect ordering
 - Reason about state before and after execution
+- Check for cross-phase vulnerabilities (Snapshot→Mutation races, Accounting→Validation order)
 
 Rules:
 - Analyze exactly ONE hypothesis per run, specified by me as H<N>.
@@ -368,8 +411,26 @@ When I provide H<N>, output STRICTLY:
 Hypothesis:
 - H<N> — <short title>
 
+Inheritance & Modifiers:
+- Contract inheritance chain
+- Modifiers on target function(s)
+- Any missing expected modifiers (nonReentrant, whenNotPaused)
+
+Semantic Phase Trace:
+- SNAPSHOT: What state is read? Is it fresh?
+- ACCOUNTING: Any time/oracle dependencies? 
+- VALIDATION: What checks exist? Can they be bypassed?
+- MUTATION: What changes? Is value conserved?
+- COMMIT: Is state consistently written?
+
 Hypothesis Status:
 - Valid / Invalid / Inconclusive
+
+Validation Checks (ALL must pass for Valid):
+- [x] Reachability: Can this path execute on-chain?
+- [x] State Freshness: Does it work with current state?
+- [x] Execution Closure: Are external calls modeled?
+- [x] Economic Realism: Is cost/timing feasible?
 
 Detailed Reasoning:
 - Step-by-step reasoning through the code paths
@@ -1163,7 +1224,6 @@ rather than asserting a risk.
 ## 10. UNIVERSAL SCOPE TRANSFER PROMPT
 ### Prompt for "moving context" to a new chat
 
-```
 You are the assistant preparing the context for moving a project to a new chat.
 Please put together a brief but complete "context package" for the current conversation.
 
@@ -1200,58 +1260,3 @@ Please put together a brief but complete "context package" for the current conve
 
 Add a block at the end:
 **"Short Version (up to 10)" lines)"** — so I can insert it as the starting context in a new chat.
-```
----
-
-### Mini-version (if you need it super quick)
-```
-Summarize this chat for transfer to a new one: project goal, what's been done, key decisions, current issue, next steps, list of pinned files and their role. Brief, structured.
-```
-### Prompt for "moving context" to a new chat (Russian)
-```
-Ты — ассистент, который подготавливает контекст для переноса проекта в новый чат.
-Пожалуйста, собери краткий, но полный “пакет контекста” по текущему диалогу.
-
-**Требования к результату:**
-
-1. Пиши структурировано, без воды.
-2. Не придумывай то, чего не было в чате — если данных нет, отметь “не указано”.
-3. Укажи всё, что важно для продолжения работы в новом чате.
-4. Отдельно учти, что в чате есть **закреплённые файлы** — перечисли их и что в них используется (если известно).
-
-**Сформируй ответ в таком формате:**
-
-### 1) Что это за проект (1–3 предложения)
-
-### 2) Цель / ожидаемый результат
-
-### 3) Текущий статус (что уже сделано)
-
-### 4) Что сейчас обсуждаем / решаем (главный фокус)
-
-### 5) Ключевые решения и договорённости (списком)
-
-### 6) Открытые вопросы / риски / что непонятно
-
-### 7) Следующие шаги (todo на ближайшие 3–10 задач)
-
-### 8) Термины / сущности / важные имена (глоссарий)
-
-### 9) Закреплённые файлы и как они используются
-
-* Название файла → зачем нужен → какие части важны
-
-### 10) Что нужно новому чату от меня (какие вводные спросить у пользователя)
-
-В конце добавь блок:
-**“Короткая версия (до 10 строк)”** — чтобы я мог вставить её как стартовый контекст в новый чат.
-```
-
-### Mini-version (Russian)
-```
-Суммируй этот чат для переноса в новый: цель проекта, что сделано, ключевые решения, текущая проблема, следующие шаги, список закреплённых файлов и их роль. Кратко, структурировано.
-```
-
-## End of Playbook v1.0
-
-
